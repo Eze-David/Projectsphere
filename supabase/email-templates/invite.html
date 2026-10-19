@@ -1,0 +1,33 @@
+<!--
+  Supabase dashboard → Authentication → Emails → Templates → "Invite user"
+  Subject:  {{ .Data.invited_by }} invited you to {{ .Data.project_name }} on ProjectSphere
+  Body:     paste everything below this comment.
+-->
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; background: #f5f7fa; padding: 32px 16px;">
+  <div style="max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 12px; padding: 32px; border: 1px solid #e3e7ee;">
+    <div style="font-size: 20px; font-weight: 800; color: #1d2433; margin-bottom: 24px;">
+      <span style="display: inline-block; width: 32px; height: 32px; line-height: 32px; text-align: center; border-radius: 8px; background: #ff5a1f; color: #ffffff;">P</span>
+      &nbsp;ProjectSphere
+    </div>
+    <h1 style="font-size: 22px; color: #1d2433; margin: 0 0 12px;">You’re invited to {{ .Data.project_name }}</h1>
+    <p style="font-size: 15px; color: #5f6b7d; line-height: 1.6; margin: 0 0 8px;">
+      <strong style="color: #1d2433;">{{ .Data.invited_by }}</strong> has invited you to join
+      <strong style="color: #1d2433;">{{ .Data.project_name }}</strong> on ProjectSphere as
+      <strong style="color: #1d2433;">{{ .Data.role_label }}</strong>.
+    </p>
+    <p style="font-size: 15px; color: #5f6b7d; line-height: 1.6; margin: 0 0 24px;">
+      Click below to accept, then choose a password to finish setting up your account.
+    </p>
+    <a href="{{ .ConfirmationURL }}"
+       style="display: inline-block; background: #ff5a1f; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 15px; padding: 12px 24px; border-radius: 8px;">
+      Accept invite
+    </a>
+    <p style="font-size: 13px; color: #8e9bb0; line-height: 1.6; margin: 28px 0 0;">
+      If the button doesn’t work, copy this link into your browser:<br />
+      <span style="word-break: break-all;">{{ .ConfirmationURL }}</span>
+    </p>
+    <p style="font-size: 13px; color: #8e9bb0; line-height: 1.6; margin: 16px 0 0;">
+      Not expecting this? You can ignore this email.
+    </p>
+  </div>
+</div>
