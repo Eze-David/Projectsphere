@@ -7,7 +7,7 @@ import {
 import { Empty, FilterBar, Modal, Progress, SimpleForm, Dropdown } from '../components/ui.jsx';
 import { matchesQuery, shortDate } from '../hooks.js';
 import { PROJECT_STATUSES, PROJECT_TYPES, seedProjects } from '../data/projects.js';
-import { access, browserSavedProjects, canApproveFor, isOverdue, money, ROLES, roleOf, progressOf, statusClass, useProjectApi, useStore } from '../store.jsx';
+import { access, browserSavedProjects, seesContract, canApproveFor, isOverdue, money, ROLES, roleOf, progressOf, statusClass, useProjectApi, useStore } from '../store.jsx';
 
 const projectFields = [
   { name: 'name', label: 'Project name', required: true, full: true },
@@ -17,7 +17,7 @@ const projectFields = [
   { name: 'status', label: 'Status', type: 'select', options: PROJECT_STATUSES, required: true },
   { name: 'start', label: 'Start date', type: 'date' },
   { name: 'end', label: 'Target completion', type: 'date' },
-  { name: 'budget', label: 'Budget (₦)', type: 'number' },
+  { name: 'budget', label: 'Contract value (₦)', type: 'number', hint: 'Only project owners can see this.' },
   { name: 'description', label: 'Description', type: 'textarea', full: true },
 ];
 
@@ -44,7 +44,8 @@ export function ProjectsList() {
     : [];
   const openTasks = projects.reduce((n, p) => n + p.tasks.filter((t) => t.status !== 'Done').length, 0);
   const openRfis = projects.reduce((n, p) => n + p.rfis.filter((r) => r.status === 'Open').length, 0);
-  const totalBudget = projects.reduce((n, p) => n + Number(p.budget || 0), 0);
+  const owned = projects.filter((p) => seesContract(p, user.id));
+  const totalBudget = owned.reduce((n, p) => n + Number(p.budget || 0), 0);
 
   const create = (values) => navigate(`/projects/${createProject(values)}`);
   const saved = browserSavedProjects();
@@ -70,7 +71,7 @@ export function ProjectsList() {
         <div className="stat"><strong>{projects.filter((p) => p.status === 'Active').length}</strong><span>Active projects</span></div>
         <div className="stat"><strong>{openTasks}</strong><span>Open tasks</span></div>
         <div className="stat"><strong>{openRfis}</strong><span>Open requests for information</span></div>
-        <div className="stat"><strong>{money(totalBudget)}</strong><span>Total contract value</span></div>
+        {owned.length > 0 && <div className="stat"><strong>{money(totalBudget)}</strong><span>Total contract value (your projects)</span></div>}
       </div>
 
       <FilterBar query={query} onQuery={setQuery} placeholder="Search projects and tasks…" options={PROJECT_STATUSES} active={status} onActive={setStatus} />
@@ -106,7 +107,7 @@ export function ProjectsList() {
                 <Progress value={progressOf(p)} />
                 <div className="row-between meta">
                   <span>{Math.round(progressOf(p) * 100)}% complete</span>
-                  {access(p, user.id, 'budget') >= 1 && <span>{money(p.budget)}</span>}
+                  {seesContract(p, user.id) && <span>{money(p.budget)}</span>}
                 </div>
               </div>
             </Link>
@@ -317,11 +318,11 @@ export function ProjectLayout() {
 
       <Modal open={editing} onClose={() => setEditing(false)} title="Project settings" wide>
         <SimpleForm
-          fields={projectFields}
+          fields={seesContract(project, user.id) ? projectFields : projectFields.filter((f) => f.name !== 'budget')}
           initial={project}
           submitLabel="Save changes"
           onSubmit={(v) => {
-            api.updateProject({ ...v, budget: Number(v.budget) || 0 });
+            api.updateProject(seesContract(project, user.id) ? { ...v, budget: Number(v.budget) || 0 } : v);
             setEditing(false);
           }}
         />

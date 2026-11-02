@@ -30,6 +30,10 @@ export const allocationPaid = (p, allocationId) => sumOf(p.allocationPayments.fi
 export const paidOutOf = (p, costId) =>
   sumOf(p.allocationPayments.filter((x) => p.allocations.find((a) => a.id === x.allocationId)?.costId === costId), 'amount');
 export const allocatedOf = (p, costId) => sumOf(p.allocations.filter((a) => a.costId === costId), 'amount');
+// Spent from an allocation: expenses (not rejected) on its budget line recorded by the person it's for —
+// or, for a role allocation, by anyone with that role. Its balance is what's allocated but not yet spent.
+export const allocationSpent = (p, a) => sumOf(countedExpenses(p).filter((e) => e.costId === a.costId &&
+  (a.recipientUser ? e.createdBy === a.recipientUser : roleOf(p, e.createdBy) === a.recipientRole)), 'amount');
 
 // ---------- Job roles ----------
 // The database enforces these (role_level() in supabase/migrations/20261021000000_task_edit_rights.sql);
@@ -86,6 +90,8 @@ export const roleOf = (p, userId) => {
   return LEGACY_ROLES[r] ?? r;
 };
 export const access = (p, userId, area) => ACCESS[area]?.[roleOf(p, userId)] ?? 0;
+// Only a project's owners see its contract value (enforced by contract_values row-level security).
+export const seesContract = (p, userId) => roleOf(p, userId) === 'owner';
 export const canApprove = (p, userId) => access(p, userId, 'expenses') >= 4;
 // Approving something `submitter` sent in: never your own, unless nobody else on the project can approve.
 export const canApproveFor = (p, userId, submitter) =>

@@ -5,7 +5,7 @@ import { AttachmentThumbs, Attachments, attachmentsFor, uploadPending } from '..
 import { formatDate } from '../hooks.js';
 import { PAYMENT_METHODS } from '../data/projects.js';
 import {
-  access, allocatedOf, allocationPaid, canPay, memberName, money, roleOf, ROLES, sumOf, TODAY, useStore,
+  access, allocatedOf, allocationPaid, allocationSpent, canPay, memberName, money, roleOf, ROLES, sumOf, TODAY, useStore,
 } from '../store.jsx';
 
 const PAYMENT_STATUS = {
@@ -49,11 +49,17 @@ export function AllocationsSection({ project, api, userId }) {
         <div className="table-wrap">
           <table className="table clickable">
             <thead>
-              <tr><th>Allocated to</th><th>Budget line</th><th className="num">Allocated</th><th className="num">Paid</th><th className="num">Remaining</th><th>Payments</th></tr>
+              <tr>
+                <th>Allocated to</th><th>Budget line</th><th className="num">Allocated</th><th className="num">Paid</th>
+                <th className="num" title="Allocated − paid">Left to pay</th>
+                <th className="num" title="Expenses on this line recorded by the person (or role) the money was allocated to">Spent</th>
+                <th className="num" title="Allocated − spent: money allocated but not spent yet">Balance</th><th>Payments</th>
+              </tr>
             </thead>
             <tbody>
               {allocations.map((a) => {
                 const paid = allocationPaid(project, a.id);
+                const spentBy = allocationSpent(project, a);
                 const pays = project.allocationPayments.filter((x) => x.allocationId === a.id);
                 const counts = Object.keys(PAYMENT_STATUS).map((s) => [s, pays.filter((x) => x.status === s).length]).filter(([, n]) => n);
                 return (
@@ -68,6 +74,8 @@ export function AllocationsSection({ project, api, userId }) {
                     <td className="num">{money(a.amount)}</td>
                     <td className="num">{money(paid)}</td>
                     <td className={`num ${a.amount - paid > 0 ? '' : 'positive'}`}>{money(a.amount - paid)}</td>
+                    <td className="num">{money(spentBy)}</td>
+                    <td className={`num balance ${a.amount - spentBy < 0 ? 'overdue' : ''}`}>{money(a.amount - spentBy)}</td>
                     <td>
                       {counts.length === 0 ? <span className="meta">None yet</span> : (
                         <div className="pay-counts">{counts.map(([s, n]) => <span key={s} className="meta">{n} {s.toLowerCase()}</span>)}</div>

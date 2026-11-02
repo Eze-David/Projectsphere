@@ -8,7 +8,7 @@ import { formatDate } from '../hooks.js';
 import { RFI_STATUSES, STANDARD_COST_CODES, TASK_STATUSES, TRADES, WEATHER } from '../data/projects.js';
 import {
   access, ACCESS, allocatedOf, AREAS, inviteMessage, canApprove, canApproveFor, countedExpenses, expensesOf, isOverdue, levelLabel, money, progressOf, ROLES, roleOf,
-  paidOutOf, slug, spentOf, statusClass, sumOf, TODAY, useStore,
+  paidOutOf, seesContract, slug, spentOf, statusClass, sumOf, TODAY, useStore,
 } from '../store.jsx';
 import { AllocationsSection } from './allocations.jsx';
 
@@ -32,6 +32,8 @@ export function Overview() {
   const { user } = useStore();
   const can = (area) => access(project, user.id, area) >= 1;
   const spent = spentOf(project);
+  // Owners compare spending with the contract value; others (who can't see it) with the budgeted line items.
+  const budgetBase = seesContract(project, user.id) ? project.budget : sumOf(project.costs, 'budgeted');
   const nextMilestones = project.milestones.filter((m) => !m.done).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 3);
   const latestLog = [...project.logs].sort((a, b) => b.date.localeCompare(a.date))[0];
 
@@ -63,8 +65,8 @@ export function Overview() {
           {can('budget') && (
             <div className="card card-body mb">
               <div className="row-between"><h3>Budget</h3><Link className="link-btn" to="../budget">View →</Link></div>
-              <Progress value={project.budget ? spent / project.budget : 0} />
-              <p className="meta">{money(spent)} spent of {money(project.budget)} ({money(project.budget - spent)} remaining)</p>
+              <Progress value={budgetBase ? spent / budgetBase : 0} />
+              <p className="meta">{money(spent)} spent of {money(budgetBase)} {seesContract(project, user.id) ? 'contract value' : 'budgeted'} ({money(budgetBase - spent)} remaining)</p>
             </div>
           )}
 
@@ -95,7 +97,7 @@ export function Overview() {
             <dt>Location</dt><dd>{project.location || '—'}</dd>
             <dt>Start</dt><dd>{project.start ? formatDate(project.start) : '—'}</dd>
             <dt>Completion</dt><dd>{project.end ? formatDate(project.end) : '—'}</dd>
-            {can('budget') && <><dt>Contract value</dt><dd>{money(project.budget)}</dd></>}
+            {seesContract(project, user.id) && <><dt>Contract value</dt><dd>{money(project.budget)}</dd></>}
             {can('team') && <><dt>Team</dt><dd>{project.members.length} with access · {project.team.length} contacts</dd></>}
             <dt>Your role</dt><dd>{ROLES[roleOf(project, user.id)] ?? '—'}</dd>
           </dl>
@@ -167,6 +169,9 @@ export function Budget() {
   const spent = spentOf(project);
   const counted = countedExpenses(project);
   const unassigned = sumOf(counted.filter((e) => !project.costs.some((c) => c.id === e.costId)), 'amount');
+  // Balance: of the money allocated on each line, how much hasn't been spent yet (allocated − expenses on the line).
+  const allocatedLines = project.costs.filter((c) => allocatedOf(project, c.id) > 0);
+  const totalBalance = allocatedLines.reduce((n, c) => n + allocatedOf(project, c.id) - sumOf(expensesOf(project, c.id), 'amount'), 0);
   const requests = [...project.budgetRequests].sort((x, y) =>
     (x.status === 'Pending') === (y.status === 'Pending') ? y.createdAt.localeCompare(x.createdAt) : x.status === 'Pending' ? -1 : 1);
   const pendingFor = (costId) => project.budgetRequests.filter((r) => r.status === 'Pending' && r.costId === costId);
@@ -202,14 +207,15 @@ export function Budget() {
           : <button className="btn btn-primary btn-sm" onClick={() => setRequesting({})}><Plus size={16} /> Request new line item</button>}
       </PageHead>
 
-      <div className="grid grid-3 mb">
-        <div className="stat"><strong>{money(project.budget)}</strong><span>Contract value</span></div>
+      <div className={`grid ${seesContract(project, user.id) ? 'grid-3' : 'grid-2'} mb`}>
+        {seesContract(project, user.id) && <div className="stat"><strong>{money(project.budget)}</strong><span>Contract value</span></div>}
         <div className="stat"><strong>{money(budgeted)}</strong><span>Budgeted line items</span></div>
         <div className="stat"><strong>{money(spent)}</strong><span>Spent to date</span></div>
       </div>
       <p className="muted small">
         Spent = expenses recorded against each cost code on the <Link className="link-btn" to="../expenses">Expenses</Link> page
         (rejected ones excluded), payments made from budget allocations, plus any other costs entered directly on the line.
+        <strong> Variance</strong> = budgeted − spent. <strong>Balance</strong> = money allocated on the line that hasn’t been spent yet (allocated − expenses).
         {!approver && ' Only owners and approvers can change the budget — use “Request change” to propose one.'}
       </p>
 
@@ -220,7 +226,8 @@ export function Budget() {
               <tr>
                 <th>Code</th><th>Description</th><th className="num">Budgeted</th><th className="num">Allocated</th>
                 <th className="num">Expenses</th><th className="num">Paid to people</th><th className="num">Other costs</th>
-                <th className="num">Variance</th><th />
+                <th className="num" title="Budgeted − spent. Negative means over budget.">Variance</th>
+                <th className="num" title="Allocated − expenses on the line: allocated money not yet spent.">Balance</th><th />
               </tr>
             </thead>
             <tbody>
@@ -229,10 +236,11 @@ export function Budget() {
                 const paidOut = paidOutOf(project, c.id);
                 const allocated = allocatedOf(project, c.id);
                 const variance = c.budgeted - c.actual - exp - paidOut;
+                const balance = allocated - exp; // allocated money not yet spent
                 const open = pendingFor(c.id).length;
                 return (
                   <tr key={c.id}>
-                    <td>{c.code}</td>
+                    <td className="nowrap">{c.code}</td>
                     <td>{c.description}{open > 0 && <span className="pill-pending">{open} change pending</span>}</td>
                     <td className="num">{money(c.budgeted)}</td>
                     <td className={`num ${allocated > c.budgeted ? 'overdue' : 'meta'}`} title={allocated > c.budgeted ? 'More is allocated than budgeted' : undefined}>{allocated ? money(allocated) : '—'}</td>
@@ -240,6 +248,7 @@ export function Budget() {
                     <td className="num">{paidOut ? money(paidOut) : '—'}</td>
                     <td className="num">{money(c.actual)}</td>
                     <td className={`num ${variance < 0 ? 'overdue' : 'positive'}`}>{money(variance)}</td>
+                    <td className={`num balance ${balance < 0 ? 'overdue' : ''}`} title={allocated ? `${money(allocated)} allocated − ${money(exp)} spent` : 'Nothing allocated on this line'}>{allocated ? money(balance) : '—'}</td>
                     <td className="num nowrap">
                       {approver
                         ? <button className="link-btn" onClick={() => setEditing(c)}>Edit</button>
@@ -258,6 +267,7 @@ export function Budget() {
                   <td className="num">—</td>
                   <td className="num">—</td>
                   <td className="num overdue">{money(-unassigned)}</td>
+                  <td className="num">—</td>
                   <td />
                 </tr>
               )}
@@ -271,6 +281,7 @@ export function Budget() {
                 <td className="num">{money(sumOf(project.allocationPayments, 'amount'))}</td>
                 <td className="num">{money(sumOf(project.costs, 'actual'))}</td>
                 <td className={`num ${budgeted - spent < 0 ? 'overdue' : 'positive'}`}>{money(budgeted - spent)}</td>
+                <td className={`num balance ${totalBalance < 0 ? 'overdue' : ''}`}>{allocatedLines.length ? money(totalBalance) : '—'}</td>
                 <td />
               </tr>
             </tfoot>

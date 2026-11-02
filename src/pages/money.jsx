@@ -5,7 +5,7 @@ import { Empty, FilterBar, Modal, Progress, SimpleForm } from '../components/ui.
 import { formatDate, matchesQuery } from '../hooks.js';
 import { EXPENSE_CATEGORIES, EXPENSE_STATUSES, INVOICE_STATUSES, PAYMENT_METHODS, STANDARD_COST_CODES } from '../data/projects.js';
 import {
-  access, canApprove, canApproveFor, countedExpenses, memberName, money, spentOf, statusClass, sumOf, TODAY, useStore,
+  access, canApprove, seesContract, canApproveFor, countedExpenses, memberName, money, spentOf, statusClass, sumOf, TODAY, useStore,
 } from '../store.jsx';
 import { AttachmentBadge, Attachments, uploadPending } from '../components/Attachments.jsx';
 import { DeleteButton, PageHead } from './sections.jsx';
@@ -349,6 +349,7 @@ function PaymentsEditor({ payments, onChange, amount }) {
 
 export function Finance() {
   const { project, api } = useOutletContext();
+  const { user } = useStore();
   const [editing, setEditing] = useState(null);
   const [pending, setPending] = useState([]);
   const [payments, setPayments] = useState([]);
@@ -392,7 +393,7 @@ export function Finance() {
       <PageHead title="Finance" />
 
       <div className="stats stats-6 mb">
-        <div className="stat"><strong>{money(project.budget)}</strong><span>Contract value</span></div>
+        {seesContract(project, user.id) && <div className="stat"><strong>{money(project.budget)}</strong><span>Contract value</span></div>}
         <div className="stat"><strong>{money(invoiced)}</strong><span>Invoiced to client</span></div>
         <div className="stat"><strong>{money(received)}</strong><span>Received</span></div>
         <div className="stat"><strong className={overdue.length ? 'overdue' : ''}>{money(outstanding)}</strong><span>Outstanding{overdue.length > 0 && ` · ${overdue.length} overdue`}</span></div>

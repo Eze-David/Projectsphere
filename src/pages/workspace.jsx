@@ -5,7 +5,7 @@ import { MyPayments } from './allocations.jsx';
 import { Avatar, Empty, Modal, Progress } from '../components/ui.jsx';
 import { formatDate, matchesQuery, shortDate } from '../hooks.js';
 import {
-  access, allPeople, canApproveFor, inviteMessage, isOverdue, memberName, money, progressOf, ROLES, roleOf, spentOf, statusClass, TODAY, useStore,
+  access, allPeople, seesContract, canApproveFor, inviteMessage, isOverdue, memberName, money, progressOf, ROLES, roleOf, spentOf, statusClass, TODAY, useStore,
 } from '../store.jsx';
 import { Labels, PriorityFlag } from './tasks.jsx';
 
@@ -145,11 +145,11 @@ function ApprovalQueue({ projects, apiFor, userId }) {
 
 export function Reports() {
   const { projects, user } = useStore();
-  // Money totals only include projects where this person can see the budget.
-  const moneyProjects = projects.filter((p) => access(p, user.id, 'budget') >= 1);
   const tasks = projects.flatMap((p) => p.tasks);
-  const contract = moneyProjects.reduce((s, p) => s + Number(p.budget || 0), 0);
-  const spent = moneyProjects.reduce((s, p) => s + spentOf(p), 0);
+  // Contract value is owner-only, so this total covers just the projects this person owns.
+  const owned = projects.filter((p) => seesContract(p, user.id));
+  const contract = owned.reduce((s, p) => s + Number(p.budget || 0), 0);
+  const ownedSpent = owned.reduce((s, p) => s + spentOf(p), 0);
 
   return (
     <div className="page">
@@ -159,7 +159,7 @@ export function Reports() {
         <div className="stat"><strong>{tasks.filter((t) => t.status === 'Done').length}/{tasks.length}</strong><span>Tasks completed</span></div>
         <div className="stat"><strong>{tasks.filter(isOverdue).length}</strong><span>Overdue tasks</span></div>
         <div className="stat"><strong>{tasks.reduce((s, t) => s + Number(t.hours || 0), 0)}h</strong><span>Hours logged</span></div>
-        <div className="stat"><strong>{contract ? Math.round((spent / contract) * 100) : 0}%</strong><span>Of contract value spent</span></div>
+        {owned.length > 0 && <div className="stat"><strong>{contract ? Math.round((ownedSpent / contract) * 100) : 0}%</strong><span>Of contract value spent (your projects)</span></div>}
       </div>
 
       {projects.length === 0 ? <Empty>No projects yet.</Empty> : (
@@ -175,7 +175,9 @@ export function Reports() {
               {projects.map((p) => {
                 const next = p.milestones.filter((m) => !m.done).sort((a, b) => a.date.localeCompare(b.date))[0];
                 const overdue = p.tasks.filter(isOverdue).length;
-                const used = p.budget ? spentOf(p) / p.budget : 0;
+                // Owners compare with the contract value; others with the budgeted line items.
+                const base = seesContract(p, user.id) ? p.budget : p.costs.reduce((n, c) => n + Number(c.budgeted || 0), 0);
+                const used = base ? spentOf(p) / base : 0;
                 return (
                   <tr key={p.id}>
                     <td><Link className="table-link" to={`/projects/${p.id}/overview`}>{p.name}</Link></td>
@@ -184,7 +186,7 @@ export function Reports() {
                     <td className="num">{p.tasks.filter((t) => t.status !== 'Done').length}</td>
                     <td className={`num ${overdue ? 'overdue' : ''}`}>{overdue}</td>
                     <td className="num">{access(p, user.id, 'rfis') >= 1 ? p.rfis.filter((r) => r.status === 'Open').length : '—'}</td>
-                    <td className={`num ${used > 1 ? 'overdue' : ''}`}>{access(p, user.id, 'budget') >= 1 ? `${money(spentOf(p))} / ${money(p.budget)}` : '—'}</td>
+                    <td className={`num ${used > 1 ? 'overdue' : ''}`}>{access(p, user.id, 'budget') >= 1 ? `${money(spentOf(p))} / ${money(base)}` : '—'}</td>
                     <td>{next ? <>{next.name} <span className="meta">{formatDate(next.date)}</span></> : '—'}</td>
                   </tr>
                 );
